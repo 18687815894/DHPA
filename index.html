@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DHPA 智慧停车协同服务平台</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- 【修改1】引入 ECharts 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            background-color: #f0f2f5;
+        }
+
+        #header {
+            height: 50px;
+            background: linear-gradient(90deg, #001529 0%, #003a8c 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            position: relative;
+        }
+
+        #header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        #header .subtitle {
+            margin-left: 20px;
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        #main-container {
+            display: flex;
+            height: calc(100% - 50px);
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 450px;
+            background: white;
+            box-shadow: -4px 0 15px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            z-index: 999;
+        }
+
+        /* 占用率图例 */
+        #legend {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            background: #fafafa;
+        }
+
+        #legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .legend-items {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-right: 5px;
+            border: 1px solid #ddd;
+        }
+
+        /* 停车场基础信息 */
+        #parking-info {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+        }
+
+        #parking-name {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .info-item {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-top: 5px;
+        }
+
+        /* 表格切换按钮 */
+        .table-switch {
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .switch-btn {
+            padding: 8px 20px;
+            border: 1px solid #e5e6eb;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .switch-btn.active {
+            background: #003a8c;
+            color: #fff;
+            border-color: #003a8c;
+        }
+
+        /* 【修改2】图表容器样式 */
+        .content-wrapper {
+            flex: 1;
+            padding: 15px 20px;
+            overflow-y: auto;
+        }
+
+        .content-container {
+            display: none;
+            height: 100%;
+        }
+
+        .content-container.active {
+            display: block;
+        }
+
+        #chart1 {
+            width: 100%;
+            height: 300px;
+        }
+
+        /* 给折线图设置高度 */
+
+        /* 加载动画 */
+        #loading {
+            position: absolute;
+            top: 50px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 顶部标题 -->
+    <div id="header">
+        <h1>DHPA 分解增强预测模型 · 协同服务平台</h1>
+        <div class="subtitle">面向城市智慧停车</div>
+    </div>
+
+    <!-- 主容器：地图 + 侧边栏 -->
+    <div id="main-container">
+        <div id="map"></div>
+
+        <div id="sidebar">
+            <!-- 占用率分级图例 -->
+            <div id="legend">
+                <h4>占用率分级</h4>
+                <div class="legend-items">
+                    <div class="legend-item"><span class="legend-color" style="background-color: #08306B"></span>满载
+                        (≥95%)</div>
+                    <div class="legend-item"><span class="legend-color" style="background-color: #08519C"></span>繁忙
+                        (80%-95%)</div>
+                    <div class="legend-item"><span class="legend-color" style="background-color: #3182BD"></span>中等
+                        (60%-80%)</div>
+                    <div class="legend-item"><span class="legend-color" style="background-color: #6BAED6"></span>可用
+                        (30%-60%)</div>
+                    <div class="legend-item"><span class="legend-color" style="background-color: #BDD7E7"></span>空闲
+                        (5%-30%)</div>
+                    <div class="legend-item"><span class="legend-color" style="background-color: #F0F8FF"></span>空置 (
+                        &lt;5%)</div>
+                </div>
+            </div>
+
+            <!-- 停车场基础信息 -->
+            <div id="parking-info">
+                <div id="parking-name">请在地图上选择一个停车场</div>
+                <div id="status-badge-container"></div>
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">总车位</div>
+                        <div class="info-value" id="total-slots">-</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">可用车位</div>
+                        <div class="info-value" id="available-slots">-</div>
+                    </div>
+                    <div class="info-item" style="grid-column: span 2;">
+                        <div class="info-label">当前占用率</div>
+                        <div class="info-value" id="occupancy-rate">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 按钮切换 -->
+            <div class="table-switch">
+                <button class="switch-btn active" data-target="panel1">双模型对比（3.6）</button>
+                <button class="switch-btn" data-target="panel2">单模型预测（3.5）</button>
+            </div>
+
+            <!-- 【修改3】内容容器：折线图 + 空面板 -->
+            <div class="content-wrapper">
+                <div id="panel1" class="content-container active">
+                    <div id="chart1" style="width:100%;height:300px;"></div>
+                </div>
+                <div id="panel2" class="content-container">
+                    <div id="chart2" style="width:100%;height:300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载遮罩 -->
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>正在从后端加载数据...</div>
+    </div>
+
+    <script>
+        // 全局变量
+        let map;
+        let parkingLots = [];
+        const markers = [];
+        let chart1, chart2;
+        let clusterGroup = L.markerClusterGroup();  // 全局变量
+
+        // 占用率颜色映射
+        function getColor(occ) {
+            if (occ >= 0.95) return '#08306B';
+            if (occ >= 0.80) return '#08519C';
+            if (occ >= 0.60) return '#3182BD';
+            if (occ >= 0.30) return '#6BAED6';
+            if (occ >= 0.05) return '#BDD7E7';
+            return '#F0F8FF';
+        }
+
+        // 初始化地图
+        function initMap() {
+            map = L.map('map').setView([1.3521, 103.8198], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap, &copy; CartoDB',
+                subdomains: 'abcd',
+                maxZoom: 19
+            }).addTo(map);
+        }
+
+        // 渲染全部停车场标记
+        function addMarkers() {
+            if (clusterGroup) map.removeLayer(clusterGroup);
+            clusterGroup = L.markerClusterGroup({
+                maxClusterRadius: 50,       // 聚类半径
+                disableClusteringAtZoom: 16 // 16级以下聚类
+            });
+            for (let lot of parkingLots) {
+                const marker = L.circleMarker([lot.lat, lot.lng], {
+                    radius: 6,
+                    fillColor: getColor(lot.occupancy),
+                    color: '#fff',
+                    weight: 1,
+                    fillOpacity: 0.85
+                }).bindTooltip(`${lot.name}<br>可用: ${lot.available}/${lot.total}`)
+                    .on('click', () => showParkingDetail(lot));
+                clusterGroup.addLayer(marker);
+            }
+            map.addLayer(clusterGroup);
+        }
+
+        let currentHighlight = null;
+        function highlightMarker(lot) {
+            if (currentHighlight) map.removeLayer(currentHighlight);
+            currentHighlight = L.circleMarker([lot.lat, lot.lng], {
+                radius: 10,
+                color: 'gold',
+                weight: 3,
+                fillColor: getColor(lot.occupancy),
+                fillOpacity: 0.9
+            }).addTo(map);
+        }
+        // 在 showParkingDetail 中调用 highlightMarker(lot)
+
+        // ====================== 3.6 双模型对比图表 ======================
+        function renderChartPanel1(data) {
+            if (!chart1) {
+                chart1 = echarts.init(document.getElementById('chart1'));
+            }
+
+            let history = data.history;
+            let trueVal = data.true;
+            let predStart = data.pred_start;
+            let predEnd = data.pred_end;
+
+            // ★ 钳位负值为 0（放在函数内部）
+            predStart = predStart.map(v => Math.max(0, v));
+            predEnd = predEnd.map(v => Math.max(0, v));
+            trueVal = trueVal.map(v => Math.max(0, v));
+            history = history.map(v => Math.max(0, v));
+
+            // X轴标签
+            const xAxisData = [];
+            for (let i = history.length; i > 0; i--) { xAxisData.push(`历史-${i}`); }
+            for (let i = 1; i <= 6; i++) { xAxisData.push(`预测+${i}`); }
+
+            const histFull = history.concat(new Array(6).fill(null));
+            const trueFull = (new Array(history.length).fill(null)).concat(trueVal);
+            const startFull = (new Array(history.length).fill(null)).concat(predStart);
+            const endFull = (new Array(history.length).fill(null)).concat(predEnd);
+
+            // 分段计算指标
+            const calcMetrics = (a, b) => {
+                if (!a || !b || a.length !== b.length) return { RMSE: '-', MAE: '-' };
+                let sse = 0, sae = 0, n = a.length;
+                for (let i = 0; i < n; i++) {
+                    const diff = a[i] - b[i];
+                    sse += diff * diff;
+                    sae += Math.abs(diff);
+                }
+                return {
+                    RMSE: Math.sqrt(sse / n).toFixed(2),
+                    MAE: (sae / n).toFixed(2)
+                };
+            };
+
+            const short = { s: 0, e: 1 };
+            const mid = { s: 1, e: 4 };
+            const long = { s: 4, e: 6 };
+
+            const mEnd = {
+                short: calcMetrics(trueVal.slice(short.s, short.e), predEnd.slice(short.s, short.e)),
+                mid: calcMetrics(trueVal.slice(mid.s, mid.e), predEnd.slice(mid.s, mid.e)),
+                long: calcMetrics(trueVal.slice(long.s, long.e), predEnd.slice(long.s, long.e))
+            };
+            const mStart = {
+                short: calcMetrics(trueVal.slice(short.s, short.e), predStart.slice(short.s, short.e)),
+                mid: calcMetrics(trueVal.slice(mid.s, mid.e), predStart.slice(mid.s, mid.e)),
+                long: calcMetrics(trueVal.slice(long.s, long.e), predStart.slice(long.s, long.e))
+            };
+
+            const tableHTML = `
+            <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:12px;">
+                <tr style="background:#f5f5f5;">
+                    <th>预测区间</th><th colspan="2">MAE</th><th colspan="2">RMSE</th>
+                </tr>
+                <tr style="text-align:center;">
+                    <td>短时 (1步)</td>
+                    <td>${mEnd.short.MAE}<br><small style="color:#27ae60">End</small></td>
+                    <td>${mStart.short.MAE}<br><small style="color:#e74c3c">Start</small></td>
+                    <td>${mEnd.short.RMSE}<br><small style="color:#27ae60">End</small></td>
+                    <td>${mStart.short.RMSE}<br><small style="color:#e74c3c">Start</small></td>
+                </tr>
+                <tr style="text-align:center;">
+                    <td>中时 (2-4步)</td>
+                    <td>${mEnd.mid.MAE}<br><small style="color:#27ae60">End</small></td>
+                    <td>${mStart.mid.MAE}<br><small style="color:#e74c3c">Start</small></td>
+                    <td>${mEnd.mid.RMSE}<br><small style="color:#27ae60">End</small></td>
+                    <td>${mStart.mid.RMSE}<br><small style="color:#e74c3c">Start</small></td>
+                </tr>
+                <tr style="text-align:center;background:#ffe6e6;">
+                    <td><b>长时 (5-6步)</b></td>
+                    <td><b>${mEnd.long.MAE}</b><br><small style="color:#27ae60">End</small></td>
+                    <td><b>${mStart.long.MAE}</b><br><small style="color:#e74c3c">Start</small></td>
+                    <td><b>${mEnd.long.RMSE}</b><br><small style="color:#27ae60">End</small></td>
+                    <td><b>${mStart.long.RMSE}</b><br><small style="color:#e74c3c">Start</small></td>
+                </tr>
+            </table>`;
+
+            const option = {
+                title: { text: '多模型预测对比', left: 'center', textStyle: { fontSize: 14 } },
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['全程真实', 'DHPA预测', 'DeepPA预测'], bottom: '8%' },
+                grid: { left: '3%', right: '4%', bottom: '35%', top: '15%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: xAxisData,
+                    axisLabel: { fontSize: 10, rotate: 45 }
+                },
+                yAxis: { type: 'value', name: '可用车位' },
+                series: [
+                    {
+                        name: '全程真实',
+                        type: 'line',
+                        data: history.concat(trueVal),
+                        itemStyle: { color: '#333' },
+                        lineStyle: { width: 2.5 }
+                    },
+                    {
+                        name: 'DHPA预测',
+                        type: 'line',
+                        data: endFull,
+                        itemStyle: { color: '#2980b9' },
+                        lineStyle: { type: 'dashed', width: 2 }
+                    },
+                    {
+                        name: 'DeepPA预测',
+                        type: 'line',
+                        data: startFull,
+                        itemStyle: { color: '#95a5a6' },
+                        lineStyle: { type: 'dotted', width: 2 }
+                    }
+                ]
+            };
+
+            chart1.setOption(option, true);
+
+            let tableContainer = document.getElementById('metrics-table');
+            if (!tableContainer) {
+                tableContainer = document.createElement('div');
+                tableContainer.id = 'metrics-table';
+                tableContainer.style.marginTop = '10px';
+                document.getElementById('panel1').appendChild(tableContainer);
+            }
+            tableContainer.innerHTML = tableHTML;
+        }
+
+        // ====================== 3.5 单模型预测曲线 ======================
+        function renderChartPanel2(data) {
+            if (!chart2) {
+                chart2 = echarts.init(document.getElementById('chart2'));
+            }
+
+            let history = data.history.map(v => Math.max(0, v));
+            let predEnd = data.pred_end.map(v => Math.max(0, v));
+
+            const xAxisData = [];
+            for (let i = history.length; i > 0; i--) { xAxisData.push(`历史-${i}`); }
+            for (let i = 1; i <= 6; i++) { xAxisData.push(`预测+${i}`); }
+
+            const histFull = history.concat(new Array(6).fill(null));
+            const predFull = (new Array(history.length).fill(null)).concat(predEnd);
+
+            const upper = predEnd.map(v => v + 5);
+            const lower = predEnd.map(v => Math.max(0, v - 5));
+            const upperFull = (new Array(history.length).fill(null)).concat(upper);
+            const lowerFull = (new Array(history.length).fill(null)).concat(lower);
+
+            const option = {
+                title: { text: '停车位可用性预测（DHPA）', left: 'center', textStyle: { fontSize: 14 } },
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['历史真实', '未来预测', '置信区间'], bottom: '5%' },
+                grid: { left: '3%', right: '4%', bottom: '15%', top: '15%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: false,
+                    data: xAxisData,
+                    axisLabel: { fontSize: 10, rotate: 45 }
+                },
+                yAxis: { type: 'value', name: '可用车位' },
+                series: [
+                    {
+                        name: '历史真实',
+                        type: 'line',
+                        data: histFull,
+                        itemStyle: { color: '#333' },
+                        lineStyle: { width: 2.5 }
+                    },
+                    {
+                        name: '未来预测',
+                        type: 'line',
+                        data: predFull,
+                        itemStyle: { color: '#2980b9' },
+                        lineStyle: { type: 'dashed', width: 2.5 }
+                    },
+                    {
+                        name: '置信区间',
+                        type: 'line',
+                        data: upperFull,
+                        showSymbol: false,
+                        lineStyle: { opacity: 0 },
+                        areaStyle: { color: 'rgba(41,128,185,0.1)' },
+                        stack: 'confidence',
+                        emphasis: { disabled: true }
+                    },
+                    {
+                        name: '置信区间',
+                        type: 'line',
+                        data: lowerFull,
+                        showSymbol: false,
+                        lineStyle: { opacity: 0 },
+                        areaStyle: { color: '#fff' },
+                        stack: 'confidence',
+                        emphasis: { disabled: true }
+                    }
+                ],
+                markLine: {
+                    silent: true,
+                    symbol: 'none',
+                    data: [{
+                        xAxis: history.length - 1,
+                        lineStyle: { color: '#999', type: 'dashed', width: 1 },
+                        label: { show: true, formatter: '当前时刻' }
+                    }]
+                }
+            };
+
+            chart2.setOption(option, true);
+        }
+
+        // 显示停车场详情
+        async function showParkingDetail(lot) {
+            document.getElementById('parking-name').innerText = lot.name;
+            document.getElementById('total-slots').innerText = lot.total;
+            document.getElementById('available-slots').innerText = lot.available;
+            const occPercent = (lot.occupancy * 100).toFixed(1);
+            document.getElementById('occupancy-rate').innerText = `${occPercent}%`;
+
+            let statusText = '', badgeColor = '#333';
+            if (lot.occupancy >= 0.95) { statusText = 'Full · 满载'; badgeColor = '#08306B'; }
+            else if (lot.occupancy >= 0.80) { statusText = 'Busy · 繁忙'; badgeColor = '#08519C'; }
+            else if (lot.occupancy >= 0.60) { statusText = 'Moderate · 中等'; badgeColor = '#3182BD'; }
+            else if (lot.occupancy >= 0.30) { statusText = 'Available · 可用'; badgeColor = '#6BAED6'; }
+            else if (lot.occupancy >= 0.05) { statusText = 'Free · 空闲'; badgeColor = '#BDD7E7'; }
+            else { statusText = 'Empty · 空置'; badgeColor = '#aaa'; }
+            document.getElementById('status-badge-container').innerHTML =
+                `<span class="status-badge" style="background: ${badgeColor}20; color: ${badgeColor}">${statusText}</span>`;
+
+            try {
+                const res = await fetch(`http://localhost:5000/api/parking/${lot.id}/history`);
+                const data = await res.json();
+                renderChartPanel1(data);
+                renderChartPanel2(data);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        // 按钮切换面板
+        function bindSwitch() {
+            const btns = document.querySelectorAll('.switch-btn');
+            const panels = document.querySelectorAll('.content-container');
+            btns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btns.forEach(b => b.classList.remove('active'));
+                    panels.forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    const target = document.getElementById(btn.dataset.target);
+                    target.classList.add('active');
+                    setTimeout(() => {
+                        if (target.id === 'panel1' && chart1) chart1.resize();
+                        if (target.id === 'panel2' && chart2) chart2.resize();
+                    }, 100);
+                });
+            });
+        }
+
+        // 主入口
+        async function main() {
+            performance.mark('start');          // 【添加】开始计时
+            initMap();
+            bindSwitch();
+            try {
+                const res = await fetch('http://localhost:5000/api/parking/list');
+                parkingLots = await res.json();
+                addMarkers();                   // 聚类渲染完成
+                performance.mark('end');        // 【添加】结束计时
+                performance.measure('mapLoadTime', 'start', 'end');
+                const measure = performance.getEntriesByName('mapLoadTime')[0];
+                console.log(`✅ 地图加载耗时: ${measure.duration.toFixed(2)} ms`);
+                document.getElementById('loading').style.display = 'none';
+            } catch (err) {
+                document.getElementById('loading').innerHTML =
+                    `<div style="color:red">加载失败，请检查后端服务</div>`;
+                console.error(err);
+            }
+        }
+
+        window.onload = main;
+    </script>
+</body>
+
+</html>
